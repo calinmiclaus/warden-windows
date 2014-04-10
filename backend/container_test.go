@@ -231,22 +231,49 @@ var _ = Describe("Container", func() {
 				Ω(reflect.ValueOf(writeEnd).Pointer()).Should(Equal(reflect.ValueOf(stream).Pointer()))
 			})
 
-			PContext("when process payloads show up over the channel", func() {
+			Context("when process payloads show up over the channel", func() {
 				It("writes them to the stream", func() {
-					// TODO: the rest lol
+					processID, stream, err := container.Run(backend.ProcessSpec{
+						Script:     "rm -rf /",
+						Privileged: true,
+					})
+					Ω(err).ShouldNot(HaveOccurred())
 
-					// var payload backend.ProcessStream
-					// Eventually(stream).Should(Receive(&payload))
-					// Ω(payload.Source).Should(Equal(backend.ProcessStreamSourceStdout))
-					// Ω(string(payload.Data)).Should(Equal("stdout data for 42"))
+					subscribers := muxer.Subscribers(processID)
+					Ω(subscribers).Should(HaveLen(1))
 
-					// Eventually(stream).Should(Receive(&payload))
-					// Ω(payload.Source).Should(Equal(backend.ProcessStreamSourceStderr))
-					// Ω(string(payload.Data)).Should(Equal("stderr data for 42"))
+					writeEnd := subscribers[0]
 
-					// Eventually(stream).Should(Receive(&payload))
-					// Ω(payload.ExitStatus).ShouldNot(BeNil())
-					// Ω(*payload.ExitStatus).Should(Equal(uint32(142)))
+					go func() {
+						writeEnd <- backend.ProcessStream{
+							Source: backend.ProcessStreamSourceStdout,
+							Data:   []byte("stdout data for 42"),
+						}
+
+						writeEnd <- backend.ProcessStream{
+							Source: backend.ProcessStreamSourceStderr,
+							Data:   []byte("stderr data for 42"),
+						}
+
+						exitStatus := uint32(142)
+
+						writeEnd <- backend.ProcessStream{
+							ExitStatus: &exitStatus,
+						}
+					}()
+
+					var payload backend.ProcessStream
+					Eventually(stream).Should(Receive(&payload))
+					Ω(payload.Source).Should(Equal(backend.ProcessStreamSourceStdout))
+					Ω(string(payload.Data)).Should(Equal("stdout data for 42"))
+
+					Eventually(stream).Should(Receive(&payload))
+					Ω(payload.Source).Should(Equal(backend.ProcessStreamSourceStderr))
+					Ω(string(payload.Data)).Should(Equal("stderr data for 42"))
+
+					Eventually(stream).Should(Receive(&payload))
+					Ω(payload.ExitStatus).ShouldNot(BeNil())
+					Ω(*payload.ExitStatus).Should(Equal(uint32(142)))
 				})
 			})
 		})
