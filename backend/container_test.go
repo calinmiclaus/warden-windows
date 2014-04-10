@@ -53,18 +53,18 @@ var _ = Describe("Container", func() {
 	BeforeEach(func() {
 		runner = fake_command_runner.New()
 		muxer = fake_muxer.New()
-		container = NewContainer("some-id", "some-handle", runner, muxer)
+		container = NewContainer("some-id", "some-handle", "some-container-path", runner, muxer)
 	})
 
 	Describe("Start", func() {
 		It("spawns a daemon with the correct handle", func() {
-			err := container.Start()
+			err := container.Start("DAEMON_PATH")
 			Ω(err).ShouldNot(HaveOccurred())
 
 			Ω(runner).Should(HaveStartedExecuting(
 				fake_command_runner.CommandSpec{
 					Path: "DAEMON_PATH",
-					Args: []string{"--handle", "some-handle"},
+					Args: []string{"--handle", "some-handle", "--rootPath", "some-container-path"},
 				},
 			))
 		})
@@ -73,7 +73,6 @@ var _ = Describe("Container", func() {
 			runner.WhenRunning(
 				fake_command_runner.CommandSpec{
 					Path: "DAEMON_PATH",
-					Args: []string{"--handle", "some-handle"},
 				}, func(cmd *exec.Cmd) error {
 					Ω(cmd.Stdin).ShouldNot(BeNil())
 					Ω(cmd.Stdout).ShouldNot(BeNil())
@@ -82,7 +81,7 @@ var _ = Describe("Container", func() {
 				},
 			)
 
-			err := container.Start()
+			err := container.Start("DAEMON_PATH")
 			Ω(err).ShouldNot(HaveOccurred())
 		})
 
@@ -93,7 +92,6 @@ var _ = Describe("Container", func() {
 				runner.WhenRunning(
 					fake_command_runner.CommandSpec{
 						Path: "DAEMON_PATH",
-						Args: []string{"--handle", "some-handle"},
 					}, func(cmd *exec.Cmd) error {
 						return disaster
 					},
@@ -101,7 +99,7 @@ var _ = Describe("Container", func() {
 			})
 
 			It("returns the error", func() {
-				err := container.Start()
+				err := container.Start("DAEMON_PATH")
 				Ω(err).Should(Equal(disaster))
 			})
 		})
@@ -122,7 +120,6 @@ var _ = Describe("Container", func() {
 			runner.WhenRunning(
 				fake_command_runner.CommandSpec{
 					Path: "DAEMON_PATH",
-					Args: []string{"--handle", "some-handle"},
 				}, func(cmd *exec.Cmd) error {
 					go server.ServeCodec(jsonrpc.NewServerCodec(iorpc.New(cmd.Stdout.(io.WriteCloser), cmd.Stdin.(io.ReadCloser))))
 
@@ -132,7 +129,7 @@ var _ = Describe("Container", func() {
 				},
 			)
 
-			err := container.Start()
+			err := container.Start("DAEMON_PATH")
 			Ω(err).ShouldNot(HaveOccurred())
 		})
 

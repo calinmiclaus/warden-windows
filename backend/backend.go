@@ -2,18 +2,21 @@ package backend
 
 import (
 	"errors"
-	"github.com/cloudfoundry-incubator/warden-windows/backend/payload_muxer"
 	"log"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/cloudfoundry-incubator/garden/backend"
 	"github.com/cloudfoundry/gunk/command_runner"
 
-	"github.com/cloudfoundry-incubator/garden/backend"
+	"github.com/cloudfoundry-incubator/warden-windows/backend/payload_muxer"
 )
 
 type Backend struct {
+	containerBinaryPath string
+	containerRootPath   string
+
 	runner command_runner.CommandRunner
 
 	containerIDs <-chan string
@@ -30,12 +33,19 @@ func (e UnknownHandleError) Error() string {
 	return "unknown handle: " + e.Handle
 }
 
-func New(runner command_runner.CommandRunner) *Backend {
+func New(
+	containerBinaryPath string,
+	containerRootPath string,
+	runner command_runner.CommandRunner,
+) *Backend {
 	containerIDs := make(chan string)
 
 	go generateContainerIDs(containerIDs)
 
 	return &Backend{
+		containerBinaryPath: containerBinaryPath,
+		containerRootPath:   containerRootPath,
+
 		runner: runner,
 
 		containerIDs: containerIDs,
@@ -46,8 +56,7 @@ func New(runner command_runner.CommandRunner) *Backend {
 }
 
 func (backend *Backend) Start() error {
-	log.Println("Start")
-	return errors.New("not implemented")
+	return nil
 }
 
 func (backend *Backend) Stop() {
@@ -64,13 +73,13 @@ func (backend *Backend) Create(spec backend.ContainerSpec) (backend.Container, e
 		handle = spec.Handle
 	}
 
-	container := NewContainer(id, handle, backend.runner, payload_muxer.New())
+	container := NewContainer(id, handle, backend.containerRootPath, backend.runner, payload_muxer.New())
 
 	backend.containersMutex.Lock()
 	backend.containers[handle] = container
 	backend.containersMutex.Unlock()
 
-	err := container.Start()
+	err := container.Start(backend.containerBinaryPath)
 	if err != nil {
 		return nil, err
 	}

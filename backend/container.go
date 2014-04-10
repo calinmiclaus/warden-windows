@@ -1,17 +1,19 @@
 package backend
 
 import (
-	"github.com/cloudfoundry-incubator/warden-windows/backend/messages"
 	"log"
 	"net/rpc"
 	"net/rpc/jsonrpc"
 	"os/exec"
 	"time"
 
+	"github.com/cloudfoundry-incubator/warden-windows/backend/messages"
+
 	"github.com/cloudfoundry-incubator/garden/backend"
 	"github.com/cloudfoundry/gunk/command_runner"
 
 	"github.com/cloudfoundry-incubator/warden-windows/backend/iorpc"
+	"github.com/cloudfoundry-incubator/warden-windows/backend/linecodec"
 	"github.com/cloudfoundry-incubator/warden-windows/backend/payload_muxer"
 )
 
@@ -19,16 +21,25 @@ type Container struct {
 	id     string
 	handle string
 
+	rootPath string
+
 	runner command_runner.CommandRunner
 	muxer  payload_muxer.Muxer
 
 	rpc *rpc.Client
 }
 
-func NewContainer(id, handle string, runner command_runner.CommandRunner, muxer payload_muxer.Muxer) *Container {
+func NewContainer(
+	id, handle string,
+	rootPath string,
+	runner command_runner.CommandRunner,
+	muxer payload_muxer.Muxer,
+) *Container {
 	return &Container{
 		id:     id,
 		handle: handle,
+
+		rootPath: rootPath,
 
 		runner: runner,
 		muxer:  muxer,
@@ -48,10 +59,10 @@ func (container *Container) GraceTime() time.Duration {
 	return 0
 }
 
-func (container *Container) Start() error {
+func (container *Container) Start(containerBinaryPath string) error {
 	daemon := &exec.Cmd{
-		Path: "DAEMON_PATH",
-		Args: []string{"--handle", container.handle},
+		Path: containerBinaryPath,
+		Args: []string{"--handle", container.handle, "--rootPath", container.rootPath},
 	}
 
 	stdin, err := daemon.StdinPipe()
@@ -69,14 +80,21 @@ func (container *Container) Start() error {
 		return err
 	}
 
+	conn := iorpc.New(stdin, stdout)
+
+	container.rpc = rpc.NewClientWithCodec(
+		linecodec.New(
+			stdin,
+			jsonrpc.NewClientCodec(conn),
+		),
+	)
+
+	container.muxer.SetSource(stderr)
+
 	err = container.runner.Start(daemon)
 	if err != nil {
 		return err
 	}
-
-	container.rpc = jsonrpc.NewClient(iorpc.New(stdin, stdout))
-
-	container.muxer.SetSource(stderr)
 
 	return nil
 }

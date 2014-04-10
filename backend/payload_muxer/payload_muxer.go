@@ -2,10 +2,11 @@ package payload_muxer
 
 import (
 	"encoding/json"
-	"github.com/cloudfoundry-incubator/warden-windows/backend/messages"
 	"io"
 	"log"
 	"sync"
+
+	"github.com/cloudfoundry-incubator/warden-windows/backend/messages"
 
 	"github.com/cloudfoundry-incubator/garden/backend"
 )
@@ -17,13 +18,13 @@ type Muxer interface {
 
 type PayloadMuxer struct {
 	subscribers     map[uint32][]chan<- backend.ProcessStream
-	subscribersLock *sync.RWMutex
+	subscribersLock *sync.Mutex
 }
 
 func New() PayloadMuxer {
 	return PayloadMuxer{
 		subscribers:     make(map[uint32][]chan<- backend.ProcessStream),
-		subscribersLock: new(sync.RWMutex),
+		subscribersLock: new(sync.Mutex),
 	}
 }
 
@@ -53,7 +54,7 @@ func (muxer PayloadMuxer) dispatch(stream io.Reader) {
 			return
 		}
 
-		muxer.subscribersLock.RLock()
+		muxer.subscribersLock.Lock()
 
 		subscribers := muxer.subscribers[payload.ProcessID]
 
@@ -70,6 +71,8 @@ func (muxer PayloadMuxer) dispatch(stream io.Reader) {
 
 				close(sub)
 			}
+
+			delete(muxer.subscribers, payload.ProcessID)
 		} else {
 			stream := backend.ProcessStream{
 				Source: payload.Source,
@@ -84,6 +87,6 @@ func (muxer PayloadMuxer) dispatch(stream io.Reader) {
 			}
 		}
 
-		muxer.subscribersLock.RUnlock()
+		muxer.subscribersLock.Unlock()
 	}
 }

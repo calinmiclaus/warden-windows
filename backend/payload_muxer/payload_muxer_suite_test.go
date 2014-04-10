@@ -9,5 +9,5 @@ import (
 
 func TestPayload_muxer(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Payload_muxer Suite")
+	RunSpecs(t, "PayloadMuxer Suite")
 }

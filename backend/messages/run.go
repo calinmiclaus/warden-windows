@@ -1,7 +1,7 @@
 package messages
 
 type RunRequest struct {
-	Script     string `json:"kill"`
+	Script     string `json:"script"`
 	Privileged bool   `json:"privileged"`
 }
 

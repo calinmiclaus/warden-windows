@@ -58,21 +58,6 @@ var _ = Describe("PayloadMuxer", func() {
 			})
 			Ω(err).ShouldNot(HaveOccurred())
 
-			status42 := uint32(142)
-			status43 := uint32(143)
-
-			err = encoder.Encode(&messages.ProcessPayload{
-				ProcessID:  43,
-				ExitStatus: &status43,
-			})
-			Ω(err).ShouldNot(HaveOccurred())
-
-			err = encoder.Encode(&messages.ProcessPayload{
-				ProcessID:  42,
-				ExitStatus: &status42,
-			})
-			Ω(err).ShouldNot(HaveOccurred())
-
 			var payload backend.ProcessStream
 			Eventually(processStream).Should(Receive(&payload))
 			Ω(payload.Source).Should(Equal(backend.ProcessStreamSourceStdout))
@@ -81,10 +66,6 @@ var _ = Describe("PayloadMuxer", func() {
 			Eventually(processStream).Should(Receive(&payload))
 			Ω(payload.Source).Should(Equal(backend.ProcessStreamSourceStderr))
 			Ω(string(payload.Data)).Should(Equal("stderr data for 42"))
-
-			Eventually(processStream).Should(Receive(&payload))
-			Ω(payload.ExitStatus).ShouldNot(BeNil())
-			Ω(*payload.ExitStatus).Should(Equal(uint32(142)))
 		})
 
 		Context("but no subscribers can consume it", func() {
@@ -111,6 +92,46 @@ var _ = Describe("PayloadMuxer", func() {
 				Ω(err).ShouldNot(HaveOccurred())
 
 				Eventually(processStream).Should(BeClosed())
+			})
+		})
+
+		Context("when an exit status is received", func() {
+			It("closes the channel and unsubscribes it", func() {
+				processStream := make(chan backend.ProcessStream, 1000)
+
+				muxer.Subscribe(42, processStream)
+
+				encoder := json.NewEncoder(stream)
+
+				status42 := uint32(142)
+				status43 := uint32(143)
+
+				err := encoder.Encode(&messages.ProcessPayload{
+					ProcessID:  43,
+					ExitStatus: &status43,
+				})
+				Ω(err).ShouldNot(HaveOccurred())
+
+				err = encoder.Encode(&messages.ProcessPayload{
+					ProcessID:  42,
+					ExitStatus: &status42,
+				})
+				Ω(err).ShouldNot(HaveOccurred())
+
+				var payload backend.ProcessStream
+
+				Eventually(processStream).Should(Receive(&payload))
+				Ω(payload.ExitStatus).ShouldNot(BeNil())
+				Ω(*payload.ExitStatus).Should(Equal(uint32(142)))
+
+				Eventually(processStream).Should(BeClosed())
+
+				err = encoder.Encode(&messages.ProcessPayload{
+					ProcessID: 42,
+					Source:    backend.ProcessStreamSourceStdout,
+					Data:      []byte("stdout data for 42"),
+				})
+				Ω(err).ShouldNot(HaveOccurred())
 			})
 		})
 	})
