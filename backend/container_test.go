@@ -6,7 +6,6 @@ import (
 	"net/rpc"
 	"net/rpc/jsonrpc"
 	"os/exec"
-	"reflect"
 
 	"github.com/cloudfoundry-incubator/garden/backend"
 	"github.com/cloudfoundry/gunk/command_runner/fake_command_runner"
@@ -215,7 +214,7 @@ var _ = Describe("Container", func() {
 				Ω(err).ShouldNot(HaveOccurred())
 			})
 
-			It("subscribes to the process id's payloads", func() {
+			It("subscribes to the process id's payloads and forwards the stream", func() {
 				processID, stream, err := container.Run(backend.ProcessSpec{
 					Script:     "rm -rf /",
 					Privileged: true,
@@ -227,55 +226,133 @@ var _ = Describe("Container", func() {
 
 				writeEnd := subscribers[0]
 
-				// cannot assert equality as they have different types (<-chan vs chan<-)
-				Ω(reflect.ValueOf(writeEnd).Pointer()).Should(Equal(reflect.ValueOf(stream).Pointer()))
+				go func() {
+					writeEnd <- backend.ProcessStream{
+						Source: backend.ProcessStreamSourceStdout,
+						Data:   []byte("stdout data for 42"),
+					}
+
+					writeEnd <- backend.ProcessStream{
+						Source: backend.ProcessStreamSourceStderr,
+						Data:   []byte("stderr data for 42"),
+					}
+
+					exitStatus := uint32(142)
+
+					writeEnd <- backend.ProcessStream{
+						ExitStatus: &exitStatus,
+					}
+				}()
+
+				var payload backend.ProcessStream
+				Eventually(stream).Should(Receive(&payload))
+				Ω(payload.Source).Should(Equal(backend.ProcessStreamSourceStdout))
+				Ω(string(payload.Data)).Should(Equal("stdout data for 42"))
+
+				Eventually(stream).Should(Receive(&payload))
+				Ω(payload.Source).Should(Equal(backend.ProcessStreamSourceStderr))
+				Ω(string(payload.Data)).Should(Equal("stderr data for 42"))
+
+				Eventually(stream).Should(Receive(&payload))
+				Ω(payload.ExitStatus).ShouldNot(BeNil())
+				Ω(*payload.ExitStatus).Should(Equal(uint32(142)))
 			})
 
-			Context("when process payloads show up over the channel", func() {
-				It("writes them to the stream", func() {
-					processID, stream, err := container.Run(backend.ProcessSpec{
-						Script:     "rm -rf /",
-						Privileged: true,
-					})
-					Ω(err).ShouldNot(HaveOccurred())
+			It("subscribes with a buffer of 1000", func(done Done) {
+				defer close(done)
 
-					subscribers := muxer.Subscribers(processID)
-					Ω(subscribers).Should(HaveLen(1))
-
-					writeEnd := subscribers[0]
-
-					go func() {
-						writeEnd <- backend.ProcessStream{
-							Source: backend.ProcessStreamSourceStdout,
-							Data:   []byte("stdout data for 42"),
-						}
-
-						writeEnd <- backend.ProcessStream{
-							Source: backend.ProcessStreamSourceStderr,
-							Data:   []byte("stderr data for 42"),
-						}
-
-						exitStatus := uint32(142)
-
-						writeEnd <- backend.ProcessStream{
-							ExitStatus: &exitStatus,
-						}
-					}()
-
-					var payload backend.ProcessStream
-					Eventually(stream).Should(Receive(&payload))
-					Ω(payload.Source).Should(Equal(backend.ProcessStreamSourceStdout))
-					Ω(string(payload.Data)).Should(Equal("stdout data for 42"))
-
-					Eventually(stream).Should(Receive(&payload))
-					Ω(payload.Source).Should(Equal(backend.ProcessStreamSourceStderr))
-					Ω(string(payload.Data)).Should(Equal("stderr data for 42"))
-
-					Eventually(stream).Should(Receive(&payload))
-					Ω(payload.ExitStatus).ShouldNot(BeNil())
-					Ω(*payload.ExitStatus).Should(Equal(uint32(142)))
+				processID, _, err := container.Run(backend.ProcessSpec{
+					Script:     "rm -rf /",
+					Privileged: true,
 				})
+				Ω(err).ShouldNot(HaveOccurred())
+
+				subscribers := muxer.Subscribers(processID)
+				Ω(subscribers).Should(HaveLen(1))
+
+				writeEnd := subscribers[0]
+
+				for i := 0; i < 1000; i++ {
+					writeEnd <- backend.ProcessStream{
+						Source: backend.ProcessStreamSourceStdout,
+						Data:   []byte("stdout data for 42"),
+					}
+				}
+
+				select {
+				case writeEnd <- backend.ProcessStream{}:
+					Fail("channel should have been clogged")
+				default:
+				}
+			}, 2.0)
+		})
+
+		Describe("Attach", func() {
+			It("subscribes to the process id's payloads and forwards the stream", func() {
+				stream, err := container.Attach(12)
+				Ω(err).ShouldNot(HaveOccurred())
+
+				subscribers := muxer.Subscribers(12)
+				Ω(subscribers).Should(HaveLen(1))
+
+				writeEnd := subscribers[0]
+
+				go func() {
+					writeEnd <- backend.ProcessStream{
+						Source: backend.ProcessStreamSourceStdout,
+						Data:   []byte("stdout data for 42"),
+					}
+
+					writeEnd <- backend.ProcessStream{
+						Source: backend.ProcessStreamSourceStderr,
+						Data:   []byte("stderr data for 42"),
+					}
+
+					exitStatus := uint32(142)
+
+					writeEnd <- backend.ProcessStream{
+						ExitStatus: &exitStatus,
+					}
+				}()
+
+				var payload backend.ProcessStream
+				Eventually(stream).Should(Receive(&payload))
+				Ω(payload.Source).Should(Equal(backend.ProcessStreamSourceStdout))
+				Ω(string(payload.Data)).Should(Equal("stdout data for 42"))
+
+				Eventually(stream).Should(Receive(&payload))
+				Ω(payload.Source).Should(Equal(backend.ProcessStreamSourceStderr))
+				Ω(string(payload.Data)).Should(Equal("stderr data for 42"))
+
+				Eventually(stream).Should(Receive(&payload))
+				Ω(payload.ExitStatus).ShouldNot(BeNil())
+				Ω(*payload.ExitStatus).Should(Equal(uint32(142)))
 			})
+
+			It("subscribes with a buffer of 1000", func(done Done) {
+				defer close(done)
+
+				_, err := container.Attach(12)
+				Ω(err).ShouldNot(HaveOccurred())
+
+				subscribers := muxer.Subscribers(12)
+				Ω(subscribers).Should(HaveLen(1))
+
+				writeEnd := subscribers[0]
+
+				for i := 0; i < 1000; i++ {
+					writeEnd <- backend.ProcessStream{
+						Source: backend.ProcessStreamSourceStdout,
+						Data:   []byte("stdout data for 42"),
+					}
+				}
+
+				select {
+				case writeEnd <- backend.ProcessStream{}:
+					Fail("channel should have been clogged")
+				default:
+				}
+			}, 2.0)
 		})
 	})
 })
