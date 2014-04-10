@@ -144,10 +144,6 @@ func (container *Container) CurrentCPULimits() (backend.CPULimits, error) {
 	return backend.CPULimits{}, nil
 }
 
-type ProcessPayloadDispatcher struct {
-	stream chan<- backend.ProcessStream
-}
-
 func (container *Container) Run(spec backend.ProcessSpec) (uint32, <-chan backend.ProcessStream, error) {
 	var response messages.RunResponse
 
