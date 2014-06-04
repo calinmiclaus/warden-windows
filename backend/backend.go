@@ -7,7 +7,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/cloudfoundry-incubator/garden/backend"
+	"github.com/cloudfoundry-incubator/garden/warden"
 	"github.com/cloudfoundry/gunk/command_runner"
 
 	"github.com/cloudfoundry-incubator/warden-windows/backend/payload_muxer"
@@ -21,7 +21,7 @@ type Backend struct {
 
 	containerIDs <-chan string
 
-	containers      map[string]backend.Container
+	containers      map[string]warden.Container
 	containersMutex *sync.RWMutex
 }
 
@@ -50,7 +50,7 @@ func New(
 
 		containerIDs: containerIDs,
 
-		containers:      make(map[string]backend.Container),
+		containers:      make(map[string]warden.Container),
 		containersMutex: new(sync.RWMutex),
 	}
 }
@@ -63,7 +63,17 @@ func (backend *Backend) Stop() {
 	log.Println("Stop")
 }
 
-func (backend *Backend) Create(spec backend.ContainerSpec) (backend.Container, error) {
+func (backend *Backend) GraceTime(container warden.Container) time.Duration {
+	log.Println("GraceTime")
+	return time.Duration(10 * time.Second)
+}
+
+func (backend *Backend) Capacity() (warden.Capacity, error) {
+	log.Println("TODO Capacity")
+	return warden.Capacity{}, nil
+}
+
+func (backend *Backend) Create(spec warden.ContainerSpec) (warden.Container, error) {
 	log.Println("Create")
 
 	id := <-backend.containerIDs
@@ -91,7 +101,7 @@ func (backend *Backend) Destroy(handle string) error {
 	return errors.New("not implemented")
 }
 
-func (backend *Backend) Containers() (containers []backend.Container, err error) {
+func (backend *Backend) Containers(warden.Properties) (containers []warden.Container, err error) {
 	backend.containersMutex.RLock()
 	defer backend.containersMutex.RUnlock()
 
@@ -102,7 +112,7 @@ func (backend *Backend) Containers() (containers []backend.Container, err error)
 	return containers, nil
 }
 
-func (backend *Backend) Lookup(handle string) (backend.Container, error) {
+func (backend *Backend) Lookup(handle string) (warden.Container, error) {
 	backend.containersMutex.RLock()
 	defer backend.containersMutex.RUnlock()
 

@@ -8,22 +8,22 @@ import (
 
 	"github.com/cloudfoundry-incubator/warden-windows/backend/messages"
 
-	"github.com/cloudfoundry-incubator/garden/backend"
+	"github.com/cloudfoundry-incubator/garden/warden"
 )
 
 type Muxer interface {
 	SetSource(io.Reader)
-	Subscribe(processID uint32, stream chan<- backend.ProcessStream)
+	Subscribe(processID uint32, stream chan<- warden.ProcessStream)
 }
 
 type PayloadMuxer struct {
-	subscribers     map[uint32][]chan<- backend.ProcessStream
+	subscribers     map[uint32][]chan<- warden.ProcessStream
 	subscribersLock *sync.Mutex
 }
 
 func New() PayloadMuxer {
 	return PayloadMuxer{
-		subscribers:     make(map[uint32][]chan<- backend.ProcessStream),
+		subscribers:     make(map[uint32][]chan<- warden.ProcessStream),
 		subscribersLock: new(sync.Mutex),
 	}
 }
@@ -32,7 +32,7 @@ func (muxer PayloadMuxer) SetSource(stream io.Reader) {
 	go muxer.dispatch(stream)
 }
 
-func (muxer PayloadMuxer) Subscribe(processID uint32, stream chan<- backend.ProcessStream) {
+func (muxer PayloadMuxer) Subscribe(processID uint32, stream chan<- warden.ProcessStream) {
 	muxer.subscribersLock.Lock()
 	muxer.subscribers[processID] = append(muxer.subscribers[processID], stream)
 	muxer.subscribersLock.Unlock()
@@ -59,7 +59,7 @@ func (muxer PayloadMuxer) dispatch(stream io.Reader) {
 		subscribers := muxer.subscribers[payload.ProcessID]
 
 		if payload.ExitStatus != nil {
-			stream := backend.ProcessStream{
+			stream := warden.ProcessStream{
 				ExitStatus: payload.ExitStatus,
 			}
 
@@ -74,7 +74,7 @@ func (muxer PayloadMuxer) dispatch(stream io.Reader) {
 
 			delete(muxer.subscribers, payload.ProcessID)
 		} else {
-			stream := backend.ProcessStream{
+			stream := warden.ProcessStream{
 				Source: payload.Source,
 				Data:   payload.Data,
 			}

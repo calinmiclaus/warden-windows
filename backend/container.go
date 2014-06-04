@@ -1,6 +1,7 @@
 package backend
 
 import (
+	"io"
 	"log"
 	"net/rpc"
 	"net/rpc/jsonrpc"
@@ -9,7 +10,7 @@ import (
 
 	"github.com/cloudfoundry-incubator/warden-windows/backend/messages"
 
-	"github.com/cloudfoundry-incubator/garden/backend"
+	"github.com/cloudfoundry-incubator/garden/warden"
 	"github.com/cloudfoundry/gunk/command_runner"
 
 	"github.com/cloudfoundry-incubator/warden-windows/backend/iorpc"
@@ -107,62 +108,62 @@ func (container *Container) Stop(kill bool) error {
 	)
 }
 
-func (container *Container) Info() (backend.ContainerInfo, error) {
+func (container *Container) Info() (warden.ContainerInfo, error) {
 	log.Println("TODO Info")
-	return backend.ContainerInfo{}, nil
+	return warden.ContainerInfo{}, nil
 }
 
-func (container *Container) CopyIn(src, dst string) error {
-	log.Println("TODO CopyIn")
-	return nil
+func (container *Container) StreamIn(dstPath string) (io.WriteCloser, error) {
+	log.Println("TODO StreamIn")
+	return nil, nil
 }
 
-func (container *Container) CopyOut(src, dst, owner string) error {
-	log.Println("TODO CopyOut")
-	return nil
+func (container *Container) StreamOut(srcPath string) (io.Reader, error) {
+	log.Println("TODO StreamOut")
+	return nil, nil
 }
 
-func (container *Container) LimitBandwidth(limits backend.BandwidthLimits) error {
+func (container *Container) LimitBandwidth(limits warden.BandwidthLimits) error {
 	log.Println("TODO LimitBandwidth")
 	return nil
 }
 
-func (container *Container) CurrentBandwidthLimits() (backend.BandwidthLimits, error) {
+func (container *Container) CurrentBandwidthLimits() (warden.BandwidthLimits, error) {
 	log.Println("TODO CurrentBandwidthLimits")
-	return backend.BandwidthLimits{}, nil
+	return warden.BandwidthLimits{}, nil
 }
 
-func (container *Container) LimitDisk(limits backend.DiskLimits) error {
+func (container *Container) LimitDisk(limits warden.DiskLimits) error {
 	log.Println("TODO LimitDisk")
 	return nil
 }
 
-func (container *Container) CurrentDiskLimits() (backend.DiskLimits, error) {
+func (container *Container) CurrentDiskLimits() (warden.DiskLimits, error) {
 	log.Println("TODO CurrentDiskLimits")
-	return backend.DiskLimits{}, nil
+	return warden.DiskLimits{}, nil
 }
 
-func (container *Container) LimitMemory(limits backend.MemoryLimits) error {
+func (container *Container) LimitMemory(limits warden.MemoryLimits) error {
 	log.Println("TODO LimitMemory")
 	return nil
 }
 
-func (container *Container) CurrentMemoryLimits() (backend.MemoryLimits, error) {
+func (container *Container) CurrentMemoryLimits() (warden.MemoryLimits, error) {
 	log.Println("TODO CurrentMemoryLimits")
-	return backend.MemoryLimits{}, nil
+	return warden.MemoryLimits{}, nil
 }
 
-func (container *Container) LimitCPU(limits backend.CPULimits) error {
+func (container *Container) LimitCPU(limits warden.CPULimits) error {
 	log.Println("TODO LimitCPU")
 	return nil
 }
 
-func (container *Container) CurrentCPULimits() (backend.CPULimits, error) {
+func (container *Container) CurrentCPULimits() (warden.CPULimits, error) {
 	log.Println("TODO CurrentCPULimits")
-	return backend.CPULimits{}, nil
+	return warden.CPULimits{}, nil
 }
 
-func (container *Container) Run(spec backend.ProcessSpec) (uint32, <-chan backend.ProcessStream, error) {
+func (container *Container) Run(spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
 	var response messages.RunResponse
 
 	err := container.rpc.Call(
@@ -177,15 +178,15 @@ func (container *Container) Run(spec backend.ProcessSpec) (uint32, <-chan backen
 		return 0, nil, err
 	}
 
-	stream := make(chan backend.ProcessStream, 1000)
+	stream := make(chan warden.ProcessStream, 1000)
 
 	container.muxer.Subscribe(response.ProcessID, stream)
 
 	return response.ProcessID, stream, nil
 }
 
-func (container *Container) Attach(processID uint32) (<-chan backend.ProcessStream, error) {
-	stream := make(chan backend.ProcessStream, 1000)
+func (container *Container) Attach(processID uint32) (<-chan warden.ProcessStream, error) {
+	stream := make(chan warden.ProcessStream, 1000)
 
 	container.muxer.Subscribe(processID, stream)
 

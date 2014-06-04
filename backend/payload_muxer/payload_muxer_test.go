@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 	"io"
 
-	"github.com/cloudfoundry-incubator/garden/backend"
+	"github.com/cloudfoundry-incubator/garden/warden"
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
@@ -31,7 +31,7 @@ var _ = Describe("PayloadMuxer", func() {
 		})
 
 		It("sends it over the returned channel", func() {
-			processStream := make(chan backend.ProcessStream, 1000)
+			processStream := make(chan warden.ProcessStream, 1000)
 
 			muxer.Subscribe(42, processStream)
 
@@ -39,38 +39,38 @@ var _ = Describe("PayloadMuxer", func() {
 
 			err := encoder.Encode(&messages.ProcessPayload{
 				ProcessID: 42,
-				Source:    backend.ProcessStreamSourceStdout,
+				Source:    warden.ProcessStreamSourceStdout,
 				Data:      []byte("stdout data for 42"),
 			})
 			Ω(err).ShouldNot(HaveOccurred())
 
 			err = encoder.Encode(&messages.ProcessPayload{
 				ProcessID: 43,
-				Source:    backend.ProcessStreamSourceStdout,
+				Source:    warden.ProcessStreamSourceStdout,
 				Data:      []byte("stdout data for 43"),
 			})
 			Ω(err).ShouldNot(HaveOccurred())
 
 			err = encoder.Encode(&messages.ProcessPayload{
 				ProcessID: 42,
-				Source:    backend.ProcessStreamSourceStderr,
+				Source:    warden.ProcessStreamSourceStderr,
 				Data:      []byte("stderr data for 42"),
 			})
 			Ω(err).ShouldNot(HaveOccurred())
 
-			var payload backend.ProcessStream
+			var payload warden.ProcessStream
 			Eventually(processStream).Should(Receive(&payload))
-			Ω(payload.Source).Should(Equal(backend.ProcessStreamSourceStdout))
+			Ω(payload.Source).Should(Equal(warden.ProcessStreamSourceStdout))
 			Ω(string(payload.Data)).Should(Equal("stdout data for 42"))
 
 			Eventually(processStream).Should(Receive(&payload))
-			Ω(payload.Source).Should(Equal(backend.ProcessStreamSourceStderr))
+			Ω(payload.Source).Should(Equal(warden.ProcessStreamSourceStderr))
 			Ω(string(payload.Data)).Should(Equal("stderr data for 42"))
 		})
 
 		Context("but no subscribers can consume it", func() {
 			It("does not block", func() {
-				processStream := make(chan backend.ProcessStream)
+				processStream := make(chan warden.ProcessStream)
 
 				muxer.Subscribe(42, processStream)
 
@@ -78,7 +78,7 @@ var _ = Describe("PayloadMuxer", func() {
 
 				err := encoder.Encode(&messages.ProcessPayload{
 					ProcessID: 42,
-					Source:    backend.ProcessStreamSourceStdout,
+					Source:    warden.ProcessStreamSourceStdout,
 					Data:      []byte("stdout data for 42"),
 				})
 				Ω(err).ShouldNot(HaveOccurred())
@@ -97,7 +97,7 @@ var _ = Describe("PayloadMuxer", func() {
 
 		Context("when an exit status is received", func() {
 			It("closes the channel and unsubscribes it", func() {
-				processStream := make(chan backend.ProcessStream, 1000)
+				processStream := make(chan warden.ProcessStream, 1000)
 
 				muxer.Subscribe(42, processStream)
 
@@ -118,7 +118,7 @@ var _ = Describe("PayloadMuxer", func() {
 				})
 				Ω(err).ShouldNot(HaveOccurred())
 
-				var payload backend.ProcessStream
+				var payload warden.ProcessStream
 
 				Eventually(processStream).Should(Receive(&payload))
 				Ω(payload.ExitStatus).ShouldNot(BeNil())
@@ -128,7 +128,7 @@ var _ = Describe("PayloadMuxer", func() {
 
 				err = encoder.Encode(&messages.ProcessPayload{
 					ProcessID: 42,
-					Source:    backend.ProcessStreamSourceStdout,
+					Source:    warden.ProcessStreamSourceStdout,
 					Data:      []byte("stdout data for 42"),
 				})
 				Ω(err).ShouldNot(HaveOccurred())

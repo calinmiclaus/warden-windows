@@ -7,7 +7,7 @@ import (
 	"net/rpc/jsonrpc"
 	"os/exec"
 
-	"github.com/cloudfoundry-incubator/garden/backend"
+	"github.com/cloudfoundry-incubator/garden/warden"
 	"github.com/cloudfoundry/gunk/command_runner/fake_command_runner"
 	. "github.com/cloudfoundry/gunk/command_runner/fake_command_runner/matchers"
 	. "github.com/onsi/ginkgo"
@@ -187,7 +187,7 @@ var _ = Describe("Container", func() {
 					return nil
 				}
 
-				pid, _, err := container.Run(backend.ProcessSpec{
+				pid, _, err := container.Run(warden.ProcessSpec{
 					Script:     "rm -rf /",
 					Privileged: true,
 				})
@@ -204,7 +204,7 @@ var _ = Describe("Container", func() {
 					return nil
 				}
 
-				_, _, err := container.Run(backend.ProcessSpec{
+				_, _, err := container.Run(warden.ProcessSpec{
 					Script:     "rm -rf /",
 					Privileged: true,
 				})
@@ -212,7 +212,7 @@ var _ = Describe("Container", func() {
 			})
 
 			It("subscribes to the process id's payloads and forwards the stream", func() {
-				processID, stream, err := container.Run(backend.ProcessSpec{
+				processID, stream, err := container.Run(warden.ProcessSpec{
 					Script:     "rm -rf /",
 					Privileged: true,
 				})
@@ -224,30 +224,30 @@ var _ = Describe("Container", func() {
 				writeEnd := subscribers[0]
 
 				go func() {
-					writeEnd <- backend.ProcessStream{
-						Source: backend.ProcessStreamSourceStdout,
+					writeEnd <- warden.ProcessStream{
+						Source: warden.ProcessStreamSourceStdout,
 						Data:   []byte("stdout data for 42"),
 					}
 
-					writeEnd <- backend.ProcessStream{
-						Source: backend.ProcessStreamSourceStderr,
+					writeEnd <- warden.ProcessStream{
+						Source: warden.ProcessStreamSourceStderr,
 						Data:   []byte("stderr data for 42"),
 					}
 
 					exitStatus := uint32(142)
 
-					writeEnd <- backend.ProcessStream{
+					writeEnd <- warden.ProcessStream{
 						ExitStatus: &exitStatus,
 					}
 				}()
 
-				var payload backend.ProcessStream
+				var payload warden.ProcessStream
 				Eventually(stream).Should(Receive(&payload))
-				Ω(payload.Source).Should(Equal(backend.ProcessStreamSourceStdout))
+				Ω(payload.Source).Should(Equal(warden.ProcessStreamSourceStdout))
 				Ω(string(payload.Data)).Should(Equal("stdout data for 42"))
 
 				Eventually(stream).Should(Receive(&payload))
-				Ω(payload.Source).Should(Equal(backend.ProcessStreamSourceStderr))
+				Ω(payload.Source).Should(Equal(warden.ProcessStreamSourceStderr))
 				Ω(string(payload.Data)).Should(Equal("stderr data for 42"))
 
 				Eventually(stream).Should(Receive(&payload))
@@ -258,7 +258,7 @@ var _ = Describe("Container", func() {
 			It("subscribes with a buffer of 1000", func(done Done) {
 				defer close(done)
 
-				processID, _, err := container.Run(backend.ProcessSpec{
+				processID, _, err := container.Run(warden.ProcessSpec{
 					Script:     "rm -rf /",
 					Privileged: true,
 				})
@@ -270,14 +270,14 @@ var _ = Describe("Container", func() {
 				writeEnd := subscribers[0]
 
 				for i := 0; i < 1000; i++ {
-					writeEnd <- backend.ProcessStream{
-						Source: backend.ProcessStreamSourceStdout,
+					writeEnd <- warden.ProcessStream{
+						Source: warden.ProcessStreamSourceStdout,
 						Data:   []byte("stdout data for 42"),
 					}
 				}
 
 				select {
-				case writeEnd <- backend.ProcessStream{}:
+				case writeEnd <- warden.ProcessStream{}:
 					Fail("channel should have been clogged")
 				default:
 				}
@@ -295,30 +295,30 @@ var _ = Describe("Container", func() {
 				writeEnd := subscribers[0]
 
 				go func() {
-					writeEnd <- backend.ProcessStream{
-						Source: backend.ProcessStreamSourceStdout,
+					writeEnd <- warden.ProcessStream{
+						Source: warden.ProcessStreamSourceStdout,
 						Data:   []byte("stdout data for 42"),
 					}
 
-					writeEnd <- backend.ProcessStream{
-						Source: backend.ProcessStreamSourceStderr,
+					writeEnd <- warden.ProcessStream{
+						Source: warden.ProcessStreamSourceStderr,
 						Data:   []byte("stderr data for 42"),
 					}
 
 					exitStatus := uint32(142)
 
-					writeEnd <- backend.ProcessStream{
+					writeEnd <- warden.ProcessStream{
 						ExitStatus: &exitStatus,
 					}
 				}()
 
-				var payload backend.ProcessStream
+				var payload warden.ProcessStream
 				Eventually(stream).Should(Receive(&payload))
-				Ω(payload.Source).Should(Equal(backend.ProcessStreamSourceStdout))
+				Ω(payload.Source).Should(Equal(warden.ProcessStreamSourceStdout))
 				Ω(string(payload.Data)).Should(Equal("stdout data for 42"))
 
 				Eventually(stream).Should(Receive(&payload))
-				Ω(payload.Source).Should(Equal(backend.ProcessStreamSourceStderr))
+				Ω(payload.Source).Should(Equal(warden.ProcessStreamSourceStderr))
 				Ω(string(payload.Data)).Should(Equal("stderr data for 42"))
 
 				Eventually(stream).Should(Receive(&payload))
@@ -338,14 +338,14 @@ var _ = Describe("Container", func() {
 				writeEnd := subscribers[0]
 
 				for i := 0; i < 1000; i++ {
-					writeEnd <- backend.ProcessStream{
-						Source: backend.ProcessStreamSourceStdout,
+					writeEnd <- warden.ProcessStream{
+						Source: warden.ProcessStreamSourceStdout,
 						Data:   []byte("stdout data for 42"),
 					}
 				}
 
 				select {
-				case writeEnd <- backend.ProcessStream{}:
+				case writeEnd <- warden.ProcessStream{}:
 					Fail("channel should have been clogged")
 				default:
 				}
