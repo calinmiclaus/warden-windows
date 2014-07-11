@@ -9,8 +9,6 @@ import (
 
 	"github.com/cloudfoundry-incubator/garden/warden"
 	"github.com/cloudfoundry/gunk/command_runner"
-
-	"github.com/cloudfoundry-incubator/warden-windows/backend/payload_muxer"
 )
 
 type Backend struct {
@@ -65,12 +63,12 @@ func (backend *Backend) Stop() {
 
 func (backend *Backend) GraceTime(container warden.Container) time.Duration {
 	log.Println("GraceTime")
-	return time.Duration(10 * time.Second)
+	return time.Duration(100 * time.Second)
 }
 
 func (backend *Backend) Capacity() (warden.Capacity, error) {
 	log.Println("TODO Capacity")
-	return warden.Capacity{}, nil
+	return warden.Capacity{MemoryInBytes: 1024 * 1024 * 1024 * 100, DiskInBytes: 1024 * 1024 * 1024 * 100, MaxContainers: 1000}, nil
 }
 
 func (backend *Backend) Create(spec warden.ContainerSpec) (warden.Container, error) {
@@ -83,7 +81,7 @@ func (backend *Backend) Create(spec warden.ContainerSpec) (warden.Container, err
 		handle = spec.Handle
 	}
 
-	container := NewContainer(id, handle, backend.containerRootPath, backend.runner, payload_muxer.New())
+	container := NewContainer(id, handle, backend.containerRootPath, backend.runner)
 
 	backend.containersMutex.Lock()
 	backend.containers[handle] = container
@@ -97,7 +95,20 @@ func (backend *Backend) Create(spec warden.ContainerSpec) (warden.Container, err
 	return container, nil
 }
 
+func (backend *Backend) Ping() error {
+	return nil
+}
+
 func (backend *Backend) Destroy(handle string) error {
+	log.Println("Destroying container with handle: ", handle)
+	curContainer, ok := backend.containers[handle]
+	if ok == false {
+		return nil
+	}
+	curContainer.Stop(true)
+
+	// delete(backend.containers, handle)
+	return nil
 	return errors.New("not implemented")
 }
 
