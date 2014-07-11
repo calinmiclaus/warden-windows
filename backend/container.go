@@ -310,7 +310,8 @@ func (wp *wprocess) Wait() (int, error) {
 	return int(exitStatus), nil
 }
 
-func (container *Container) Run(spec warden.ProcessSpec, pio warden.ProcessIO) (warden.Process, error) {
+// func (container *Container) Run(processID uint32, pio warden.ProcessIO) (warden.Process, error) // new-iface
+func (container *Container) Run(spec warden.ProcessSpec) (uint32, <-chan warden.ProcessStream, error) {
 	//var response messages.RunResponse
 
 	//err := container.rpc.Call(
@@ -331,7 +332,8 @@ func (container *Container) Run(spec warden.ProcessSpec, pio warden.ProcessIO) (
 
 	//return response.ProcessID, stream, nil
 
-	log.Println("Run command: ", spec.Path, spec.Args, spec.Dir, spec.Privileged, spec.Env)
+	log.Println("Run command: ", spec.Path, spec.Args, spec.Dir, spec.Privileged, spec.EnvironmentVariables)
+	//log.Println("Run command: ", spec.Path, spec.Args, spec.Dir, spec.Privileged, spec.Env) // new-iface
 
 	cmdPath := "C:\\Windows\\System32\\cmd.exe"
 	rootPath := path.Join(container.rootPath, container.handle)
@@ -340,7 +342,13 @@ func (container *Container) Run(spec warden.ProcessSpec, pio warden.ProcessIO) (
 	spec.Path = path.Join(rootPath, spec.Path)
 
 	envs := os.Environ()
-	envs = append(envs, spec.Env...)
+
+	for _, e := range spec.EnvironmentVariables {
+		envs = append(envs, e.Key+"="+e.Value)
+	}
+
+	// envs = append(envs, spec.Env...) // new-iface
+
 	// TOTD: remove this (HATCK?!) port overriding
 	// after somebody cleans up this hardcoded values: https://github.com/cloudfoundry-incubator/app-manager/blob/master/start_message_builder/start_message_builder.go#L182
 	envs = append(envs, "NETIN_PORT="+strconv.FormatUint(uint64(container.lastNetInPort), 10))
@@ -375,26 +383,28 @@ func (container *Container) Run(spec warden.ProcessSpec, pio warden.ProcessIO) (
 	berrp := bufio.NewScanner(errp)
 	boutp := bufio.NewScanner(outp)
 
+	stream := make(chan warden.ProcessStream, 1000)
+
 	go func() {
 		for berrp.Scan() {
-			pio.Stdout.Write([]byte(berrp.Text() + "\n"))
-			//stream <- warden.ProcessStream{
-			//	Source: warden.ProcessStreamSourceStderr,
-			//	Data:   []byte(berrp.Text() + "\n"),
-			//	//ExitStatus: &exitStatus,
-			//}
+			// pio.Stdout.Write([]byte(berrp.Text() + "\n")) // new-iface
+			stream <- warden.ProcessStream{
+				Source: warden.ProcessStreamSourceStderr,
+				Data:   []byte(berrp.Text() + "\n"),
+				//ExitStatus: &exitStatus,
+			}
 
 		}
 	}()
 
 	go func() {
 		for boutp.Scan() {
-			pio.Stderr.Write([]byte(berrp.Text() + "\n"))
-			//stream <- warden.ProcessStream{
-			//	Source: warden.ProcessStreamSourceStdout,
-			//	Data:   []byte(boutp.Text() + "\n"),
-			//	//ExitStatus: &exitStatus,
-			//}
+			// pio.Stderr.Write([]byte(berrp.Text() + "\n")) // new-iface
+			stream <- warden.ProcessStream{
+				Source: warden.ProcessStreamSourceStdout,
+				Data:   []byte(boutp.Text() + "\n"),
+				//ExitStatus: &exitStatus,
+			}
 
 		}
 	}()
@@ -407,41 +417,42 @@ func (container *Container) Run(spec warden.ProcessSpec, pio warden.ProcessIO) (
 	pid := command.Process.Pid
 	container.pids[pid] = command
 
-	//go func() {
-	//	err := command.Wait()
-	//	exitStatus := uint32(0)
+	go func() {
+		err := command.Wait()
+		exitStatus := uint32(0)
 
-	//	if err != nil {
-	//		exiterr, _ := err.(*exec.ExitError)
+		if err != nil {
+			exiterr, _ := err.(*exec.ExitError)
 
-	//		// The program has exited with an exit code != 0
+			// The program has exited with an exit code != 0
 
-	//		// This works on both Unix and Windows. Although package
-	//		// syscall is generally platform dependent, WaitStatus is
-	//		// defined for both Unix and Windows and in both cases has
-	//		// an ExitStatus() method with the same signature.
-	//		if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
-	//			exitStatus = uint32(status.ExitStatus())
-	//		}
-	//	}
+			// This works on both Unix and Windows. Although package
+			// syscall is generally platform dependent, WaitStatus is
+			// defined for both Unix and Windows and in both cases has
+			// an ExitStatus() method with the same signature.
+			if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
+				exitStatus = uint32(status.ExitStatus())
+			}
+		}
 
-	//	//if _, ok := container.pids[pid]; ok {
-	//	delete(container.pids, pid)
-	//	exitStatus = uint32(0) //hack
-	//	stream <- warden.ProcessStream{
-	//		// Source:     ProcessStreamSourceInvalid,
-	//		// Data:       nil,
-	//		ExitStatus: &exitStatus,
-	//	}
-	//	log.Println("Sending exitStatus ", exitStatus, " for pid ", pid)
-	//	//}
-	//}()
+		//if _, ok := container.pids[pid]; ok {
+		delete(container.pids, pid)
+		exitStatus = uint32(0) //hack
+		stream <- warden.ProcessStream{
+			// Source:     ProcessStreamSourceInvalid,
+			// Data:       nil,
+			ExitStatus: &exitStatus,
+		}
+		log.Println("Sending exitStatus ", exitStatus, " for pid ", pid)
+		//}
+	}()
 
-	return newWprocess(command), nil
-	// return uint32(pid), stream, nil
+	// return newWprocess(command), nil // new-iface
+	return uint32(pid), stream, nil
 }
 
-func (container *Container) Attach(processID uint32, pio warden.ProcessIO) (warden.Process, error) {
+// func (container *Container) Attach(processID uint32, pio warden.ProcessIO) (warden.Process, error) { // new-iface
+func (container *Container) Attach(processID uint32) (<-chan warden.ProcessStream, error) {
 	log.Println("TODO Attach", processID)
 	//stream := make(chan warden.ProcessStream, 1000)
 
@@ -449,13 +460,14 @@ func (container *Container) Attach(processID uint32, pio warden.ProcessIO) (ward
 
 	//return stream, nil
 
-	// stream := make(chan warden.ProcessStream, 1000)
-	cmd := container.pids[int(processID)]
-	var res *wprocess
-	if cmd != nil {
-		res = newWprocess(cmd)
-	}
-	return res, nil
+	stream := make(chan warden.ProcessStream, 1000)
+	return stream, nil
+	//cmd := container.pids[int(processID)]
+	//var res *wprocess
+	//if cmd != nil {
+	//	res = newWprocess(cmd)
+	//}
+	//return res, nil
 }
 
 func (container *Container) NetIn(hostPort uint32, containerPort uint32) (uint32, uint32, error) {
