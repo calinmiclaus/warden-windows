@@ -9,6 +9,9 @@ import (
 
 	"github.com/cloudfoundry-incubator/garden/warden"
 	"github.com/cloudfoundry/gunk/command_runner"
+
+	"github.com/mattn/go-ole"
+	//"github.com/mattn/go-ole/oleutil"
 )
 
 type Backend struct {
@@ -54,7 +57,8 @@ func New(
 }
 
 func (backend *Backend) Start() error {
-	return nil
+	errr := ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED)
+	return errr
 }
 
 func (backend *Backend) Stop() {
@@ -72,6 +76,7 @@ func (backend *Backend) Capacity() (warden.Capacity, error) {
 }
 
 func (backend *Backend) Create(spec warden.ContainerSpec) (warden.Container, error) {
+	ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED)
 	log.Println("Create")
 
 	id := <-backend.containerIDs
@@ -87,11 +92,6 @@ func (backend *Backend) Create(spec warden.ContainerSpec) (warden.Container, err
 	backend.containers[handle] = container
 	backend.containersMutex.Unlock()
 
-	err := container.Start(backend.containerBinaryPath)
-	if err != nil {
-		return nil, err
-	}
-
 	return container, nil
 }
 
@@ -106,6 +106,7 @@ func (backend *Backend) Destroy(handle string) error {
 		return nil
 	}
 	curContainer.Stop(true)
+	// urContainer.Destroy()
 
 	delete(backend.containers, handle)
 	return nil
