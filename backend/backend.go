@@ -107,7 +107,7 @@ func (backend *Backend) Destroy(handle string) error {
 	}
 	curContainer.Stop(true)
 
-	// delete(backend.containers, handle)
+	delete(backend.containers, handle)
 	return nil
 	return errors.New("not implemented")
 }

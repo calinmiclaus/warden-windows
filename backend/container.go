@@ -4,7 +4,7 @@ import (
 	"strconv"
 	"syscall"
 	//"fmt"
-	"bufio"
+	//"bufio"
 	"io"
 	"log"
 	"net/rpc"
@@ -69,53 +69,12 @@ func (container *Container) GraceTime() time.Duration {
 }
 
 func (container *Container) Start(containerBinaryPath string) error {
-	//daemon := &exec.Cmd{
-	//	Path: containerBinaryPath,
-	//	Args: []string{"--handle", container.handle, "--rootPath", container.rootPath},
-	//}
-
-	//stdin, err := daemon.StdinPipe()
-	//if err != nil {
-	//	return err
-	//}
-
-	//stdout, err := daemon.StdoutPipe()
-	//if err != nil {
-	//	return err
-	//}
-
-	//stderr, err := daemon.StderrPipe()
-	//if err != nil {
-	//	return err
-	//}
-
-	//conn := iorpc.New(stdin, stdout)
-
-	//container.rpc = rpc.NewClientWithCodec(
-	//	linecodec.New(
-	//		stdin,
-	//		jsonrpc.NewClientCodec(conn),
-	//	),
-	//)
-
-	//container.muxer.SetSource(stderr)
-
-	//err = container.runner.Start(daemon)
-	//if err != nil {
-	//	return err
-	//}
-
 	log.Println("TODO Start")
 	return nil
 }
 
 func (container *Container) Stop(kill bool) error {
-	//return container.rpc.Call(
-	//	"Container.Stop",
-	//	&messages.StopRequest{Kill: kill},
-	//	&messages.StopResponse{},
-	//)
-	log.Println("TODO Stop")
+	log.Println("Stop with kill", kill)
 
 	containers := container.pids
 	container.pids = make(map[int]*exec.Cmd)
@@ -143,15 +102,16 @@ func (container *Container) Stop(kill bool) error {
 		out, err := cmd.Output()
 		if err != nil {
 			log.Println(err)
+			log.Println(string(out))
 		}
-		log.Println(string(out))
+		//log.Println(string(out))
 	}
 	return nil
 }
 
 func (container *Container) Info() (warden.ContainerInfo, error) {
 	log.Println("TODO Info")
-	return warden.ContainerInfo{Events: []string{}, ProcessIDs: []uint32{}, MappedPorts: []warden.PortMapping{}}, nil
+	return warden.ContainerInfo{Events: []string{"party"}, ProcessIDs: []uint32{}, MappedPorts: []warden.PortMapping{}}, nil
 }
 
 func (container *Container) StreamIn(dstPath string, source io.Reader) error {
@@ -295,42 +255,23 @@ func (wp *wprocess) Wait() (int, error) {
 	exitStatus := uint32(0)
 
 	if err != nil {
-		exiterr, _ := err.(*exec.ExitError)
+		if exiterr, ok := err.(*exec.ExitError); ok {
 
-		// The program has exited with an exit code != 0
+			// The program has exited with an exit code != 0
 
-		// This works on both Unix and Windows. Although package
-		// syscall is generally platform dependent, WaitStatus is
-		// defined for both Unix and Windows and in both cases has
-		// an ExitStatus() method with the same signature.
-		if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
-			exitStatus = uint32(status.ExitStatus())
+			// This works on both Unix and Windows. Although package
+			// syscall is generally platform dependent, WaitStatus is
+			// defined for both Unix and Windows and in both cases has
+			// an ExitStatus() method with the same signature.
+			if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
+				exitStatus = uint32(status.ExitStatus())
+			}
 		}
 	}
 	return int(exitStatus), nil
 }
 
 func (container *Container) Run(spec warden.ProcessSpec, pio warden.ProcessIO) (warden.Process, error) {
-	//var response messages.RunResponse
-
-	//err := container.rpc.Call(
-	//	"Container.Run",
-	//	&messages.RunRequest{
-	//		Script:     spec.Script,
-	//		Privileged: spec.Privileged,
-	//	},
-	//	&response,
-	//)
-	//if err != nil {
-	//	return 0, nil, err
-	//}
-
-	//stream := make(chan warden.ProcessStream, 1000)
-
-	//container.muxer.Subscribe(response.ProcessID, stream)
-
-	//return response.ProcessID, stream, nil
-
 	log.Println("Run command: ", spec.Path, spec.Args, spec.Dir, spec.Privileged, spec.Env)
 
 	cmdPath := "C:\\Windows\\System32\\cmd.exe"
@@ -370,33 +311,20 @@ func (container *Container) Run(spec warden.ProcessSpec, pio warden.ProcessIO) (
 	}
 
 	// https://github.com/jnwhiteh/golang/blob/master/src/pkg/syscall/syscall_windows.go#L434
+	inp, _ := command.StdinPipe()
 	errp, _ := command.StderrPipe()
 	outp, _ := command.StdoutPipe()
-	berrp := bufio.NewScanner(errp)
-	boutp := bufio.NewScanner(outp)
 
 	go func() {
-		for berrp.Scan() {
-			pio.Stdout.Write([]byte(berrp.Text() + "\n"))
-			//stream <- warden.ProcessStream{
-			//	Source: warden.ProcessStreamSourceStderr,
-			//	Data:   []byte(berrp.Text() + "\n"),
-			//	//ExitStatus: &exitStatus,
-			//}
-
-		}
+		io.Copy(inp, pio.Stdin)
 	}()
 
 	go func() {
-		for boutp.Scan() {
-			pio.Stderr.Write([]byte(berrp.Text() + "\n"))
-			//stream <- warden.ProcessStream{
-			//	Source: warden.ProcessStreamSourceStdout,
-			//	Data:   []byte(boutp.Text() + "\n"),
-			//	//ExitStatus: &exitStatus,
-			//}
+		io.Copy(pio.Stdout, outp)
+	}()
 
-		}
+	go func() {
+		io.Copy(pio.Stderr, errp)
 	}()
 
 	err := command.Start()
@@ -407,49 +335,17 @@ func (container *Container) Run(spec warden.ProcessSpec, pio warden.ProcessIO) (
 	pid := command.Process.Pid
 	container.pids[pid] = command
 
-	//go func() {
-	//	err := command.Wait()
-	//	exitStatus := uint32(0)
-
-	//	if err != nil {
-	//		exiterr, _ := err.(*exec.ExitError)
-
-	//		// The program has exited with an exit code != 0
-
-	//		// This works on both Unix and Windows. Although package
-	//		// syscall is generally platform dependent, WaitStatus is
-	//		// defined for both Unix and Windows and in both cases has
-	//		// an ExitStatus() method with the same signature.
-	//		if status, ok := exiterr.Sys().(syscall.WaitStatus); ok {
-	//			exitStatus = uint32(status.ExitStatus())
-	//		}
-	//	}
-
-	//	//if _, ok := container.pids[pid]; ok {
-	//	delete(container.pids, pid)
-	//	exitStatus = uint32(0) //hack
-	//	stream <- warden.ProcessStream{
-	//		// Source:     ProcessStreamSourceInvalid,
-	//		// Data:       nil,
-	//		ExitStatus: &exitStatus,
-	//	}
-	//	log.Println("Sending exitStatus ", exitStatus, " for pid ", pid)
-	//	//}
-	//}()
+	go func() {
+		command.Process.Wait()
+		delete(container.pids, pid)
+	}()
 
 	return newWprocess(command), nil
-	// return uint32(pid), stream, nil
 }
 
 func (container *Container) Attach(processID uint32, pio warden.ProcessIO) (warden.Process, error) {
-	log.Println("TODO Attach", processID)
-	//stream := make(chan warden.ProcessStream, 1000)
+	log.Println("Attaching to: ", processID)
 
-	//container.muxer.Subscribe(processID, stream)
-
-	//return stream, nil
-
-	// stream := make(chan warden.ProcessStream, 1000)
 	cmd := container.pids[int(processID)]
 	var res *wprocess
 	if cmd != nil {
@@ -462,7 +358,8 @@ func (container *Container) NetIn(hostPort uint32, containerPort uint32) (uint32
 	log.Println("TODO NetIn", hostPort, containerPort)
 	freePort := freeTcp4Port()
 	container.lastNetInPort = freePort
-	return freePort, freePort, nil
+	return freePort, containerPort, nil
+	//return freePort, freePort, nil
 	//return hostPort, containerPort, nil
 }
 
