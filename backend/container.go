@@ -1,7 +1,8 @@
 package backend
 
+import "C"
+
 import (
-	"runtime"
 	"strconv"
 	"sync"
 	//"syscall"
@@ -12,6 +13,7 @@ import (
 	"net/rpc"
 	"path"
 	"path/filepath"
+	//"runtime"
 	"strings"
 	//"net/rpc/jsonrpc"
 	"net"
@@ -83,6 +85,8 @@ func (container *Container) Destroy() error {
 	blocked := isLocked.Value().(bool)
 
 	if blocked == true {
+
+		log.Println("Invoking destory on prison")
 		_, errr = oleutil.CallMethod(container.prison, "Destroy")
 		if errr != nil {
 			log.Println(errr)
@@ -110,18 +114,24 @@ func (container *Container) Stop(kill bool) error {
 	container.runMutex.Lock()
 	defer container.runMutex.Unlock()
 
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-	ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED)
+	//ole.CoInitializeEx(0, ole.COINIT_MULTITHREADED)
 
-	log.Println("Stop with kill", kill)
-	_, errr := oleutil.CallMethod(container.prison, "Stop")
+	isLocked, errr := oleutil.CallMethod(container.prison, "IsLockedDown")
 	if errr != nil {
 		log.Println(errr)
 	}
+	blocked := isLocked.Value().(bool)
 
-	if kill == true {
-		container.Destroy()
+	if blocked == true {
+		log.Println("Stop with kill", kill)
+		_, errr = oleutil.CallMethod(container.prison, "Stop")
+		if errr != nil {
+			log.Println(errr)
+		}
+
+		if kill == true {
+			container.Destroy()
+		}
 	}
 
 	return errr
@@ -319,13 +329,15 @@ func (wp *wprocess) Wait() (int, error) {
 	return int(exitCode.Value().(int64)), nil
 }
 
+func (wp *wprocess) SetTTY(warden.TTYSpec) error {
+	log.Println("TODO SetTTY")
+	return nil
+}
+
 func (container *Container) Run(spec warden.ProcessSpec, pio warden.ProcessIO) (warden.Process, error) {
 	container.runMutex.Lock()
 	defer container.runMutex.Unlock()
-
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-	ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED)
+	// ole.CoInitializeEx(0, ole.COINIT_MULTITHREADED)
 
 	log.Println("Run command: ", spec.Path, spec.Args, spec.Dir, spec.Privileged, spec.Env)
 

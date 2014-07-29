@@ -1,5 +1,9 @@
 package backend
 
+// // importing C will increase the stack size. this is useful
+// // if loading a .NET COM object, beacuse the CLR requires a larger stack
+import "C"
+
 import (
 	"errors"
 	"log"
@@ -57,7 +61,7 @@ func New(
 }
 
 func (backend *Backend) Start() error {
-	errr := ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED)
+	errr := ole.CoInitializeEx(0, ole.COINIT_MULTITHREADED)
 	return errr
 }
 
@@ -76,7 +80,6 @@ func (backend *Backend) Capacity() (warden.Capacity, error) {
 }
 
 func (backend *Backend) Create(spec warden.ContainerSpec) (warden.Container, error) {
-	ole.CoInitializeEx(0, ole.COINIT_APARTMENTTHREADED)
 	log.Println("Create")
 
 	id := <-backend.containerIDs
