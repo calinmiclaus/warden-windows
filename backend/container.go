@@ -13,7 +13,7 @@ import (
 	"net/rpc"
 	"path"
 	"path/filepath"
-	//"runtime"
+	"runtime"
 	"strings"
 	//"net/rpc/jsonrpc"
 	"net"
@@ -82,6 +82,7 @@ func (container *Container) Destroy() error {
 	if errr != nil {
 		log.Println(errr)
 	}
+	defer isLocked.Clear()
 	blocked := isLocked.Value().(bool)
 
 	if blocked == true {
@@ -120,6 +121,7 @@ func (container *Container) Stop(kill bool) error {
 	if errr != nil {
 		log.Println(errr)
 	}
+	defer isLocked.Clear()
 	blocked := isLocked.Value().(bool)
 
 	if blocked == true {
@@ -303,7 +305,10 @@ type wprocess struct {
 }
 
 func newWprocess(pt *ole.IDispatch) *wprocess {
-	return &wprocess{pt: pt}
+	pt.AddRef() // call addref because we clone the pointr
+	ret := &wprocess{pt: pt}
+	runtime.SetFinalizer(ret, func(t *wprocess) { log.Println("ProcessTracker ref count after finalizer: ", t.pt.Release()) })
+	return ret
 }
 
 func (wp *wprocess) ID() uint32 {
@@ -311,6 +316,7 @@ func (wp *wprocess) ID() uint32 {
 	if errr != nil {
 		log.Println(errr)
 	}
+	defer iDpid.Clear()
 
 	return uint32(iDpid.Value().(int64))
 }
@@ -325,6 +331,7 @@ func (wp *wprocess) Wait() (int, error) {
 	if errr != nil {
 		log.Println(errr)
 	}
+	defer exitCode.Clear()
 
 	return int(exitCode.Value().(int64)), nil
 }
@@ -422,9 +429,17 @@ func (container *Container) Run(spec warden.ProcessSpec, pio warden.ProcessIO) (
 	//	io.Copy(pio.Stderr, errp)
 	//}()
 
-	stdinPipe := oleutil.MustCallMethod(cri, "RedirectStdin", true).ToString()
-	stdoutPipe := oleutil.MustCallMethod(cri, "RedirectStdout", true).ToString()
-	stderrPipe := oleutil.MustCallMethod(cri, "RedirectStderr", true).ToString()
+	stdinPipeVariant := oleutil.MustCallMethod(cri, "RedirectStdin", true)
+	defer stdinPipeVariant.Clear()
+	stdinPipe := stdinPipeVariant.ToString()
+
+	stdoutPipeVariant := oleutil.MustCallMethod(cri, "RedirectStdout", true)
+	defer stdoutPipeVariant.Clear()
+	stdoutPipe := stdoutPipeVariant.ToString()
+
+	stderrPipeVariant := oleutil.MustCallMethod(cri, "RedirectStderr", true)
+	defer stderrPipeVariant.Clear()
+	stderrPipe := stderrPipeVariant.ToString()
 
 	go func() {
 		conn, err := npipe.Dial(`\\.\pipe\` + stdoutPipe)
@@ -434,6 +449,8 @@ func (container *Container) Run(spec warden.ProcessSpec, pio warden.ProcessIO) (
 		}
 		log.Println("Connected to pipe ", conn)
 		io.Copy(pio.Stdout, conn)
+		conn.Close()
+		log.Println("Pipe closed", stdoutPipe)
 	}()
 
 	go func() {
@@ -444,10 +461,12 @@ func (container *Container) Run(spec warden.ProcessSpec, pio warden.ProcessIO) (
 		}
 		log.Println("Connected to pipe ", conn)
 		io.Copy(pio.Stdout, conn)
+		conn.Close()
+		log.Println("Pipe closed", stderrPipe)
 	}()
 
 	go func() {
-
+		return // avoid redirecting stdin until the copy can be cloed properly
 		conn, err := npipe.Dial(`\\.\pipe\` + stdinPipe)
 		if err != nil {
 			log.Println(err)
@@ -456,16 +475,14 @@ func (container *Container) Run(spec warden.ProcessSpec, pio warden.ProcessIO) (
 		log.Println("Connected to pipe ", conn)
 		io.Copy(conn, pio.Stdin)
 		conn.Close()
+		log.Println("Pipe closed", stdinPipe)
 	}()
-
-	//go ListenOnPipe(`\\.\pipe\` + stdoutPipe)
-	//go ListenOnPipe(`\\.\pipe\` + stderrPipe)
-	//go WriteOnPipe(`\\.\pipe\`+stdinPipe, "tralalal\nsdfg\nsdfg")
 
 	isLocked, errr := oleutil.CallMethod(container.prison, "IsLockedDown")
 	if errr != nil {
 		log.Println(errr)
 	}
+	defer isLocked.Clear()
 	blocked := isLocked.Value().(bool)
 
 	if blocked == false {
@@ -488,7 +505,9 @@ func (container *Container) Run(spec warden.ProcessSpec, pio warden.ProcessIO) (
 		log.Println(errr)
 		return nil, errr
 	}
+	defer ptrackerRes.Clear()
 	ptracker := ptrackerRes.ToIDispatch()
+	//ptracker.AddRef() // May need to be cleard if ToIDispatch will automatically call addref
 
 	//err := command.Start()
 	//if err != nil {
@@ -499,11 +518,13 @@ func (container *Container) Run(spec warden.ProcessSpec, pio warden.ProcessIO) (
 	if errr != nil {
 		log.Println(errr)
 	}
-	pid := int(iDpid.Value().(int64))
-	container.pids[pid] = ptracker
+	defer iDpid.Clear()
+	//pid := int(iDpid.Value().(int64))
+
+	//container.pids[pid] = ptracker
 
 	//go func() {
-	//	command.Process.Wait()
+	//	ptracker.Wait()
 	//	delete(container.pids, pid)
 	//}()
 

@@ -39,7 +39,6 @@ func (e UnknownHandleError) Error() string {
 }
 
 func New(
-	containerBinaryPath string,
 	containerRootPath string,
 	runner command_runner.CommandRunner,
 ) *Backend {
@@ -48,8 +47,7 @@ func New(
 	go generateContainerIDs(containerIDs)
 
 	return &Backend{
-		containerBinaryPath: containerBinaryPath,
-		containerRootPath:   containerRootPath,
+		containerRootPath: containerRootPath,
 
 		runner: runner,
 
