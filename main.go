@@ -8,8 +8,8 @@ import (
 	"runtime"
 	"syscall"
 
+	"github.com/cloudfoundry-incubator/cf-lager"
 	"github.com/cloudfoundry-incubator/garden/server"
-	"github.com/cloudfoundry/gunk/command_runner/windows_command_runner"
 
 	Backend "github.com/cloudfoundry-incubator/warden-windows/backend"
 )
@@ -32,12 +32,6 @@ var containerGraceTime = flag.Duration(
 	"time after which to destroy idle containers",
 )
 
-var containerBinaryPath = flag.String(
-	"containerBinaryPath",
-	"",
-	"path to the container executable",
-)
-
 var containerRootPath = flag.String(
 	"containerRootPath",
 	"",
@@ -58,13 +52,7 @@ func main() {
 
 	log.Println("set GOMAXPROCS to", maxProcs, "was", prevMaxProcs)
 
-	runner := windows_command_runner.New(*debug)
-
-	if *containerBinaryPath == "" {
-		log.Fatalln("missing -containerBinaryPath")
-	}
-
-	backend := Backend.New(*containerBinaryPath, *containerRootPath, runner)
+	backend := Backend.New(*containerRootPath, nil)
 
 	log.Println("setting up backend")
 
@@ -72,7 +60,10 @@ func main() {
 
 	graceTime := *containerGraceTime
 
-	wardenServer := server.New(*listenNetwork, *listenAddr, graceTime, backend)
+	logger := cf_lager.New("warden-winodws")
+	serverLogger := logger.Session("garden")
+
+	wardenServer := server.New(*listenNetwork, *listenAddr, graceTime, backend, serverLogger)
 
 	err := wardenServer.Start()
 	if err != nil {
