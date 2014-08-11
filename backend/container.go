@@ -13,7 +13,7 @@ import (
 	"net/rpc"
 	"path"
 	"path/filepath"
-	"runtime"
+
 	"strings"
 	//"net/rpc/jsonrpc"
 	"net"
@@ -26,9 +26,9 @@ import (
 	"github.com/cloudfoundry-incubator/garden/warden"
 	"github.com/cloudfoundry/gunk/command_runner"
 
+	"github.com/cloudfoundry-incubator/warden-windows/prison_client"
 	"github.com/mattn/go-ole"
 	"github.com/mattn/go-ole/oleutil"
-	"github.com/natefinch/npipe"
 )
 
 type Container struct {
@@ -40,7 +40,7 @@ type Container struct {
 	runner command_runner.CommandRunner
 
 	rpc           *rpc.Client
-	pids          map[int]*ole.IDispatch
+	pids          map[int]*prison_client.ProcessTracker
 	lastNetInPort uint32
 	prison        *ole.IDispatch
 	runMutex      *sync.Mutex
@@ -69,7 +69,7 @@ func NewContainer(
 		rootPath: rootPath,
 
 		runner:   runner,
-		pids:     make(map[int]*ole.IDispatch),
+		pids:     make(map[int]*prison_client.ProcessTracker),
 		prison:   iDcontainer,
 		runMutex: &sync.Mutex{},
 	}
@@ -300,6 +300,7 @@ func (container *Container) CurrentCPULimits() (warden.CPULimits, error) {
 	return warden.CPULimits{}, nil
 }
 
+/*
 type wprocess struct {
 	pt *ole.IDispatch
 }
@@ -325,11 +326,13 @@ func (wp *wprocess) Wait() (int, error) {
 	_, errr := oleutil.CallMethod(wp.pt, "Wait")
 	if errr != nil {
 		log.Println(errr)
+		return 0, errr
 	}
 
 	exitCode, errr := oleutil.CallMethod(wp.pt, "GetExitCode")
 	if errr != nil {
 		log.Println(errr)
+		return 0, errr
 	}
 	defer exitCode.Clear()
 
@@ -340,6 +343,7 @@ func (wp *wprocess) SetTTY(warden.TTYSpec) error {
 	log.Println("TODO SetTTY")
 	return nil
 }
+*/
 
 func (container *Container) Run(spec warden.ProcessSpec, pio warden.ProcessIO) (warden.Process, error) {
 	container.runMutex.Lock()
@@ -356,32 +360,20 @@ func (container *Container) Run(spec warden.ProcessSpec, pio warden.ProcessIO) (
 	spec.Path = path.Join(rootPath, spec.Path)
 
 	envs := spec.Env
-	// TOTD: remove this (HATCK?!) port overriding
+	// TOTD: remove this (HACK?!) port overriding
 	// after somebody cleans up this hardcoded values: https://github.com/cloudfoundry-incubator/app-manager/blob/master/start_message_builder/start_message_builder.go#L182
 	envs = append(envs, "NETIN_PORT="+strconv.FormatUint(uint64(container.lastNetInPort), 10))
 
-	IUcri, errr := oleutil.CreateObject("Uhuru.Prison.ComWrapper.ContainerRunInfo")
-	if errr != nil {
-		log.Println(errr)
-		return nil, errr
-	}
-	defer IUcri.Release()
-
-	cri, errr := IUcri.QueryInterface(ole.IID_IDispatch)
-	if errr != nil {
-		log.Println(errr)
-		return nil, errr
-	}
+	cri, err := prison_client.CreateContainerRunInfo()
 	defer cri.Release()
+	if err != nil {
+		log.Println(err)
+		return nil, err
+	}
 
 	for _, env := range envs {
 		spltiEnv := strings.SplitN(env, "=", 2)
-
-		_, errr = oleutil.CallMethod(cri, "AddEnvironemntVariable", spltiEnv[0], spltiEnv[1])
-		if errr != nil {
-			log.Println(errr)
-			return nil, errr
-		}
+		cri.AddEnvironemntVariable(spltiEnv[0], spltiEnv[1])
 	}
 
 	concatArgs := ""
@@ -390,92 +382,53 @@ func (container *Container) Run(spec warden.ProcessSpec, pio warden.ProcessIO) (
 	}
 
 	spec.Path = strings.Replace(spec.Path, "/", "\\", -1)
-	log.Println("Filename ", spec.Path, "Arguments: ", concatArgs)
+
 	concatArgs = " /c " + spec.Path + " " + concatArgs
+	log.Println("Filename ", spec.Path, "Arguments: ", concatArgs, "Concat Args: ", concatArgs)
 
-	//oleutil.PutProperty(cri, "Filename", spec.Path)
-	oleutil.PutProperty(cri, "Filename", cmdPath)
-	oleutil.PutProperty(cri, "Arguments", concatArgs)
+	cri.SetFilename(cmdPath)
+	cri.SetArguments(concatArgs)
 
-	//command := &exec.Cmd{
-	//	Path: cmdPath,
-	//	// Dir:  rootPath,
-	//	Dir: spec.Dir,
-	//	Env: envs,
-	//	Args: append(
-	//		[]string{
-	//			"/c",
-	//			"< nul", // safety: < nul will prevent the "Terminate batch job" prompt
-	//			spec.Path,
-	//		},
-	//		spec.Args...,
-	//	),
-	//}
+	stdinWriter, err := cri.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
 
-	//// https://github.com/jnwhiteh/golang/blob/master/src/pkg/syscall/syscall_windows.go#L434
-	//inp, _ := command.StdinPipe()
-	//errp, _ := command.StderrPipe()
-	//outp, _ := command.StdoutPipe()
+	stdoutReader, err := cri.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
 
-	//go func() {
-	//	io.Copy(inp, pio.Stdin)
-	//}()
-
-	//go func() {
-	//	io.Copy(pio.Stdout, outp)
-	//}()
-
-	//go func() {
-	//	io.Copy(pio.Stderr, errp)
-	//}()
-
-	stdinPipeVariant := oleutil.MustCallMethod(cri, "RedirectStdin", true)
-	defer stdinPipeVariant.Clear()
-	stdinPipe := stdinPipeVariant.ToString()
-
-	stdoutPipeVariant := oleutil.MustCallMethod(cri, "RedirectStdout", true)
-	defer stdoutPipeVariant.Clear()
-	stdoutPipe := stdoutPipeVariant.ToString()
-
-	stderrPipeVariant := oleutil.MustCallMethod(cri, "RedirectStderr", true)
-	defer stderrPipeVariant.Clear()
-	stderrPipe := stderrPipeVariant.ToString()
+	stderrReader, err := cri.StderrPipe()
+	if err != nil {
+		return nil, err
+	}
 
 	go func() {
-		conn, err := npipe.Dial(`\\.\pipe\` + stdoutPipe)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-		log.Println("Connected to pipe ", conn)
-		io.Copy(pio.Stdout, conn)
-		conn.Close()
-		log.Println("Pipe closed", stdoutPipe)
+		log.Println("Streaming stdout ", stdoutReader)
+
+		io.Copy(pio.Stdout, stdoutReader)
+		stdoutReader.Close()
+
+		log.Println("Stdout pipe closed", stdoutReader)
 	}()
 
 	go func() {
-		conn, err := npipe.Dial(`\\.\pipe\` + stderrPipe)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-		log.Println("Connected to pipe ", conn)
-		io.Copy(pio.Stdout, conn)
-		conn.Close()
-		log.Println("Pipe closed", stderrPipe)
+		log.Println("Streaming stderr ", stderrReader)
+
+		io.Copy(pio.Stderr, stderrReader)
+		stderrReader.Close()
+
+		log.Println("Stderr pipe closed", stderrReader)
 	}()
 
 	go func() {
-		return // avoid redirecting stdin until the copy can be cloed properly
-		conn, err := npipe.Dial(`\\.\pipe\` + stdinPipe)
-		if err != nil {
-			log.Println(err)
-			return
-		}
-		log.Println("Connected to pipe ", conn)
-		io.Copy(conn, pio.Stdin)
-		conn.Close()
-		log.Println("Pipe closed", stdinPipe)
+		log.Println("Streaming stdin ", stdinWriter)
+
+		io.Copy(stdinWriter, pio.Stdin)
+		stdinWriter.Close()
+
+		log.Println("Stdin pipe closed", stdinWriter)
 	}()
 
 	isLocked, errr := oleutil.CallMethod(container.prison, "IsLockedDown")
@@ -500,46 +453,37 @@ func (container *Container) Run(spec warden.ProcessSpec, pio warden.ProcessIO) (
 	}
 
 	log.Println("Running process...")
-	ptrackerRes, errr := oleutil.CallMethod(container.prison, "Run", cri)
+	iDcri, _ := cri.GetIDispatch()
+	defer iDcri.Release()
+	ptrackerRes, errr := oleutil.CallMethod(container.prison, "Run", iDcri)
+
 	if errr != nil {
 		log.Println(errr)
 		return nil, errr
 	}
 	defer ptrackerRes.Clear()
 	ptracker := ptrackerRes.ToIDispatch()
-	//ptracker.AddRef() // May need to be cleard if ToIDispatch will automatically call addref
+	ptracker.AddRef() // ToIDispatch does not incease ref count
+	defer ptracker.Release()
 
-	//err := command.Start()
-	//if err != nil {
-	//	log.Println(err)
-	//}
+	pt := prison_client.NewProcessTracker(ptracker)
 
-	iDpid, errr := oleutil.CallMethod(ptracker, "GetPid")
-	if errr != nil {
-		log.Println(errr)
-	}
-	defer iDpid.Clear()
-	//pid := int(iDpid.Value().(int64))
-
-	//container.pids[pid] = ptracker
-
+	//pid := pt.ID()
+	//container.pids[pid] = pt
 	//go func() {
-	//	ptracker.Wait()
+	//	pt.Wait()
 	//	delete(container.pids, pid)
 	//}()
 
-	return newWprocess(ptracker), nil
+	return pt, nil
 }
 
 func (container *Container) Attach(processID uint32, pio warden.ProcessIO) (warden.Process, error) {
 	log.Println("Attaching to: ", processID)
 
 	cmd := container.pids[int(processID)]
-	var res *wprocess
-	if cmd != nil {
-		res = newWprocess(cmd)
-	}
-	return res, nil
+
+	return cmd, nil
 }
 
 func (container *Container) NetIn(hostPort uint32, containerPort uint32) (uint32, uint32, error) {
