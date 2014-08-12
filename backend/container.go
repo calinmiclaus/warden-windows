@@ -14,19 +14,16 @@ import (
 	"path"
 	"path/filepath"
 
-	"strings"
-	//"net/rpc/jsonrpc"
 	"net"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
-
-	//"github.com/cloudfoundry-incubator/warden-windows/backend/messages"
 
 	"github.com/cloudfoundry-incubator/garden/warden"
 	"github.com/cloudfoundry/gunk/command_runner"
 
-	"github.com/cloudfoundry-incubator/warden-windows/prison_client"
+	"github.com/UhuruSoftware/warden-windows/prison_client"
 	"github.com/mattn/go-ole"
 	"github.com/mattn/go-ole/oleutil"
 )
