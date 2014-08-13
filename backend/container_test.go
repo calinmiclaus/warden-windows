@@ -13,10 +13,7 @@ import (
 	. "github.com/onsi/ginkgo"
 	. "github.com/onsi/gomega"
 
-	. "github.com/cloudfoundry-incubator/warden-windows/backend"
-	"github.com/cloudfoundry-incubator/warden-windows/backend/iorpc"
-	"github.com/cloudfoundry-incubator/warden-windows/backend/messages"
-	"github.com/cloudfoundry-incubator/warden-windows/backend/payload_muxer/fake_muxer"
+	. "github.com/uhurusoftware/warden-windows/backend"
 )
 
 type FakeContainerServer struct {

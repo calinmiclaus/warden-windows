@@ -11,7 +11,7 @@ import (
 	"github.com/cloudfoundry-incubator/cf-lager"
 	"github.com/cloudfoundry-incubator/garden/server"
 
-	Backend "github.com/cloudfoundry-incubator/warden-windows/backend"
+	Backend "github.com/uhurusoftware/warden-windows/backend"
 )
 
 var listenNetwork = flag.String(

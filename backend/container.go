@@ -24,8 +24,6 @@ import (
 	"github.com/cloudfoundry/gunk/command_runner"
 
 	"github.com/UhuruSoftware/warden-windows/prison_client"
-	"github.com/mattn/go-ole"
-	"github.com/mattn/go-ole/oleutil"
 )
 
 type Container struct {
@@ -39,7 +37,7 @@ type Container struct {
 	rpc           *rpc.Client
 	pids          map[int]*prison_client.ProcessTracker
 	lastNetInPort uint32
-	prison        *ole.IDispatch
+	prison        *prison_client.Container
 	runMutex      *sync.Mutex
 }
 
@@ -48,15 +46,9 @@ func NewContainer(
 	rootPath string,
 	runner command_runner.CommandRunner,
 ) *Container {
-	iUcontainer, errr := oleutil.CreateObject("Uhuru.Prison.ComWrapper.Container")
-	if errr != nil {
-		log.Println(errr)
-	}
-	defer iUcontainer.Release()
-
-	iDcontainer, errr := iUcontainer.QueryInterface(ole.IID_IDispatch)
-	if errr != nil {
-		log.Fatal(errr)
+	container, err := prison_client.CreateContainer()
+	if err != nil {
+		log.Fatal(err)
 	}
 
 	return &Container{
@@ -67,7 +59,7 @@ func NewContainer(
 
 		runner:   runner,
 		pids:     make(map[int]*prison_client.ProcessTracker),
-		prison:   iDcontainer,
+		prison:   container,
 		runMutex: &sync.Mutex{},
 	}
 }
@@ -75,20 +67,15 @@ func NewContainer(
 func (container *Container) Destroy() error {
 	defer container.prison.Release()
 
-	isLocked, errr := oleutil.CallMethod(container.prison, "IsLockedDown")
-	if errr != nil {
-		log.Println(errr)
-	}
-	defer isLocked.Clear()
-	blocked := isLocked.Value().(bool)
+	blocked := container.prison.IsLockedDown()
 
 	if blocked == true {
 
 		log.Println("Invoking destory on prison")
-		_, errr = oleutil.CallMethod(container.prison, "Destroy")
-		if errr != nil {
-			log.Println(errr)
-			return errr
+		err := container.prison.Destroy()
+		if err != nil {
+			log.Println(err)
+			return err
 		}
 		log.Println("Container destoryed: ", container.id)
 	}
@@ -114,26 +101,21 @@ func (container *Container) Stop(kill bool) error {
 
 	//ole.CoInitializeEx(0, ole.COINIT_MULTITHREADED)
 
-	isLocked, errr := oleutil.CallMethod(container.prison, "IsLockedDown")
-	if errr != nil {
-		log.Println(errr)
-	}
-	defer isLocked.Clear()
-	blocked := isLocked.Value().(bool)
+	blocked := container.prison.IsLockedDown()
 
 	if blocked == true {
 		log.Println("Stop with kill", kill)
-		_, errr = oleutil.CallMethod(container.prison, "Stop")
-		if errr != nil {
-			log.Println(errr)
+		err := container.prison.Stop()
+		if err != nil {
+			log.Println(err)
 		}
 
 		if kill == true {
 			container.Destroy()
 		}
-	}
 
-	return errr
+		return err
+	}
 
 	//containers := container.pids
 	//container.pids = make(map[int]*exec.Cmd)
@@ -428,42 +410,29 @@ func (container *Container) Run(spec warden.ProcessSpec, pio warden.ProcessIO) (
 		log.Println("Stdin pipe closed", stdinWriter)
 	}()
 
-	isLocked, errr := oleutil.CallMethod(container.prison, "IsLockedDown")
-	if errr != nil {
-		log.Println(errr)
-	}
-	defer isLocked.Clear()
-	blocked := isLocked.Value().(bool)
+	blocked := container.prison.IsLockedDown()
 
 	if blocked == false {
 
-		oleutil.PutProperty(container.prison, "HomePath", rootPath)
+		container.prison.SetHomePath(rootPath)
 		// oleutil.PutProperty(container, "MemoryLimitBytes", 1024*1024*300)
 
 		log.Println("Locking down...")
-		_, errr = oleutil.CallMethod(container.prison, "Lockdown")
-		if errr != nil {
-			log.Println(errr)
-			return nil, errr
+		err = container.prison.Lockdown()
+		if err != nil {
+			log.Println(err)
+			return nil, err
 		}
 		log.Println("Locked down.")
 	}
 
 	log.Println("Running process...")
-	iDcri, _ := cri.GetIDispatch()
-	defer iDcri.Release()
-	ptrackerRes, errr := oleutil.CallMethod(container.prison, "Run", iDcri)
+	pt, err := container.prison.Run(cri)
 
-	if errr != nil {
-		log.Println(errr)
-		return nil, errr
+	if err != nil {
+		log.Println(err)
+		return nil, err
 	}
-	defer ptrackerRes.Clear()
-	ptracker := ptrackerRes.ToIDispatch()
-	ptracker.AddRef() // ToIDispatch does not incease ref count
-	defer ptracker.Release()
-
-	pt := prison_client.NewProcessTracker(ptracker)
 
 	//pid := pt.ID()
 	//container.pids[pid] = pt
