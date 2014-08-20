@@ -89,7 +89,7 @@ func (t *ContainerRunInfo) SetFilename(value string) {
 	}
 }
 
-func (t *ContainerRunInfo) GetFilename(value string) string {
+func (t *ContainerRunInfo) GetFilename() string {
 	res, err := oleutil.GetProperty(t.runInfo, "Filename")
 	if err != nil {
 		log.Fatal(err)
@@ -104,6 +104,16 @@ func (t *ContainerRunInfo) SetArguments(value string) {
 	if err != nil {
 		log.Fatal(err)
 	}
+}
+
+func (t *ContainerRunInfo) GetArguments() string {
+	res, err := oleutil.GetProperty(t.runInfo, "Arguments")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer res.Clear()
+
+	return res.ToString()
 }
 
 func (t *ContainerRunInfo) StdinPipe() (io.WriteCloser, error) {
