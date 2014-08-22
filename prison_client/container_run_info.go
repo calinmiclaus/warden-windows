@@ -116,6 +116,23 @@ func (t *ContainerRunInfo) GetArguments() string {
 	return res.ToString()
 }
 
+func (t *ContainerRunInfo) SetCurrentDirectory(value string) {
+	_, err := oleutil.PutProperty(t.runInfo, "CurrentDirectory", value)
+	if err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (t *ContainerRunInfo) GetCurrentDirectory() string {
+	res, err := oleutil.GetProperty(t.runInfo, "CurrentDirectory")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer res.Clear()
+
+	return res.ToString()
+}
+
 func (t *ContainerRunInfo) StdinPipe() (io.WriteCloser, error) {
 	stdinPipeVariant, err := oleutil.CallMethod(t.runInfo, "RedirectStdin", true)
 	if err != nil {

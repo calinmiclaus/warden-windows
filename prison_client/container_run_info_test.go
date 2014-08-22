@@ -84,6 +84,23 @@ var _ = Describe("ContainerRunInfo", func() {
 		})
 	})
 
+	Describe("CurrentDirectory", func() {
+		Context("when set filename succeeds", func() {
+			It("should set the right filename", func() {
+				cri, err := PrisonClient.CreateContainerRunInfo()
+				Expect(err).ShouldNot(HaveOccurred())
+				Expect(cri).ShouldNot(BeNil())
+
+				cd := "test"
+				cri.SetCurrentDirectory(cd)
+				Expect(cri.GetCurrentDirectory()).To(Equal(cd))
+
+				err = cri.Release()
+				Expect(err).ShouldNot(HaveOccurred())
+			})
+		})
+	})
+
 	Describe("Arguments", func() {
 		Context("when set arguments succeeds", func() {
 			It("should set the right arguments", func() {
