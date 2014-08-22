@@ -327,16 +327,16 @@ func (wp *wprocess) SetTTY(warden.TTYSpec) error {
 func (container *Container) Run(spec warden.ProcessSpec, pio warden.ProcessIO) (warden.Process, error) {
 	container.runMutex.Lock()
 	defer container.runMutex.Unlock()
-	// ole.CoInitializeEx(0, ole.COINIT_MULTITHREADED)
 
 	log.Println("Run command: ", spec.Path, spec.Args, spec.Dir, spec.Privileged, spec.Env)
 
 	cmdPath := "C:\\Windows\\System32\\cmd.exe"
-	rootPath := path.Join(container.rootPath, container.handle)
-	strings.Replace(rootPath, "/", "\\", -1)
 
-	spec.Dir = path.Join(rootPath, spec.Dir)
-	spec.Path = path.Join(rootPath, spec.Path)
+	rootPath := path.Join(container.rootPath, container.handle)
+	rootPath = filepath.FromSlash(rootPath)
+
+	spec.Dir = adaptPathForPrison(rootPath, spec.Dir)
+	spec.Path = adaptPathForPrison(rootPath, spec.Path)
 
 	envs := spec.Env
 	// TOTD: remove this (HACK?!) port overriding
@@ -360,13 +360,13 @@ func (container *Container) Run(spec warden.ProcessSpec, pio warden.ProcessIO) (
 		concatArgs = concatArgs + " " + v
 	}
 
-	spec.Path = strings.Replace(spec.Path, "/", "\\", -1)
-
 	concatArgs = " /c " + spec.Path + " " + concatArgs
+
 	log.Println("Filename ", spec.Path, "Arguments: ", concatArgs, "Concat Args: ", concatArgs)
 
 	cri.SetFilename(cmdPath)
 	cri.SetArguments(concatArgs)
+	cri.SetCurrentDirectory(spec.Dir)
 
 	stdinWriter, err := cri.StdinPipe()
 	if err != nil {
@@ -472,4 +472,13 @@ func freeTcp4Port() uint32 {
 	freePort := strings.Split(l.Addr().String(), ":")[1]
 	ret, _ := strconv.ParseUint(freePort, 10, 32)
 	return uint32(ret)
+}
+
+func adaptPathForPrison(rootPath string, initialPath string) string {
+	if !filepath.IsAbs(initialPath) {
+		initialPath = path.Join(rootPath, initialPath)
+	}
+
+	initialPath = filepath.FromSlash(initialPath)
+	return initialPath
 }

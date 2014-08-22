@@ -79,7 +79,7 @@ var _ = Describe("Backend", func() {
 			stderrRead, stderrWrite := io.Pipe()
 			processIo := Warden.ProcessIO{Stdin: stdinRead, Stdout: stdoutWrite, Stderr: stderrWrite}
 
-			processSpec := Warden.ProcessSpec{Path: "\\..\\..\\Windows\\System32\\ping.exe", Args: []string{"127.0.0.1"}}
+			processSpec := Warden.ProcessSpec{Path: "C:\\Windows\\System32\\ping.exe", Args: []string{"127.0.0.1"}}
 			process, err := container.Run(processSpec, processIo)
 			Ω(err).ShouldNot(HaveOccurred())
 
@@ -116,7 +116,7 @@ var _ = Describe("Backend", func() {
 			stdoutRead, stdoutWrite := io.Pipe()
 			stderrRead, stderrWrite := io.Pipe()
 			processIo := Warden.ProcessIO{Stdin: stdinRead, Stdout: stdoutWrite, Stderr: stderrWrite}
-			processSpec := Warden.ProcessSpec{Path: "\\..\\..\\Windows\\System32\\cmd.exe"}
+			processSpec := Warden.ProcessSpec{Path: "C:\\Windows\\System32\\cmd.exe"}
 			_, err := container.Run(processSpec, processIo)
 			Ω(err).ShouldNot(HaveOccurred())
 
