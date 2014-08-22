@@ -335,8 +335,8 @@ func (container *Container) Run(spec warden.ProcessSpec, pio warden.ProcessIO) (
 	rootPath := path.Join(container.rootPath, container.handle)
 	rootPath = filepath.FromSlash(rootPath)
 
-	spec.Dir = adaptPathForPrison(rootPath, spec.Dir)
-	spec.Path = adaptPathForPrison(rootPath, spec.Path)
+	spec.Dir = AdaptPathForPrison(rootPath, spec.Dir)
+	spec.Path = AdaptPathForPrison(rootPath, spec.Path)
 
 	envs := spec.Env
 	// TOTD: remove this (HACK?!) port overriding
@@ -472,13 +472,4 @@ func freeTcp4Port() uint32 {
 	freePort := strings.Split(l.Addr().String(), ":")[1]
 	ret, _ := strconv.ParseUint(freePort, 10, 32)
 	return uint32(ret)
-}
-
-func adaptPathForPrison(rootPath string, initialPath string) string {
-	if !filepath.IsAbs(initialPath) {
-		initialPath = path.Join(rootPath, initialPath)
-	}
-
-	initialPath = filepath.FromSlash(initialPath)
-	return initialPath
 }
