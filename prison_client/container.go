@@ -2,7 +2,6 @@ package prison_client
 
 import (
 	"errors"
-	"fmt"
 	"github.com/mattn/go-ole"
 	"github.com/mattn/go-ole/oleutil"
 	"log"
@@ -57,14 +56,14 @@ func (t *Container) Release() error {
 	}
 }
 
-func (t *Container) Id() uint32 {
+func (t *Container) Id() string {
 	id, err := oleutil.GetProperty(t.cont, "Id")
 	if err != nil {
 		log.Fatal(err)
 	}
 	defer id.Clear()
 
-	return uint32(id.Value().(int64))
+	return id.ToString()
 }
 
 func (t *Container) GetHomePath() string {
@@ -90,7 +89,9 @@ func (t *Container) GetMemoryLimitBytes() int64 {
 	}
 	defer value.Clear()
 
-	return value.Value().(int64)
+	// TODO: use Value() when it is aware of VT_I8
+	// return value.Value().(int64)
+	return value.Val
 }
 
 func (t *Container) SetMemoryLimitBytes(value int64) {
@@ -107,7 +108,9 @@ func (t *Container) GetDiskLimitBytes() int64 {
 	}
 	defer value.Clear()
 
-	return value.Value().(int64)
+	// TODO: use Value() when it is aware of VT_I8
+	// return value.Value().(int64)
+	return value.Val
 }
 
 func (t *Container) SetDiskLimitBytes(value int64) {
@@ -146,11 +149,11 @@ func (t *Container) IsLockedDown() bool {
 func (t *Container) Lockdown() error {
 	_, err := oleutil.CallMethod(t.cont, "Lockdown")
 	if err != nil {
-		oleerr := err.(*ole.OleError)
+		//oleerr := err.(*ole.OleError)
 		// S_FALSE           = 0x00000001
 
-		fmt.Println(err.Error())
-		fmt.Println(oleerr.String())
+		//fmt.Println(err.Error())
+		//fmt.Println(oleerr.String())
 		return err
 	}
 	return nil
