@@ -16,7 +16,7 @@ var _ = Describe("ContainerRunInfo", func() {
 		ole.CoInitializeEx(0, ole.COINIT_MULTITHREADED)
 	})
 
-	Describe("Create a new container run info", func() {
+	Describe("CreateContainerRunInfo", func() {
 		Context("when no error occurs", func() {
 			It("should create the run info container", func() {
 				cri, err := PrisonClient.CreateContainerRunInfo()
@@ -30,7 +30,7 @@ var _ = Describe("ContainerRunInfo", func() {
 		})
 	})
 
-	Describe("Environemnt variables", func() {
+	Describe("EnvironemntVariables", func() {
 		Context("when set environemnt variables succeeds", func() {
 			It("should set the right environemnt variables", func() {
 				cri, err := PrisonClient.CreateContainerRunInfo()
@@ -118,7 +118,7 @@ var _ = Describe("ContainerRunInfo", func() {
 		})
 	})
 
-	Describe("Streaming In", func() {
+	Describe("StreamingIn", func() {
 		Context("when streaming succeeds", func() {
 			It("shoul read Stdin pipe", func() {
 				cri, err := PrisonClient.CreateContainerRunInfo()
@@ -145,7 +145,7 @@ var _ = Describe("ContainerRunInfo", func() {
 		})
 	})
 
-	Describe("Streaming Out", func() {
+	Describe("StreamingOut", func() {
 		Context("when streaming succeeds", func() {
 			It("shoul read Stdout pipe", func() {
 				cri, err := PrisonClient.CreateContainerRunInfo()
@@ -172,7 +172,7 @@ var _ = Describe("ContainerRunInfo", func() {
 		})
 	})
 
-	Describe("Streaming error", func() {
+	Describe("StreamingError", func() {
 		Context("when streaming succeeds", func() {
 			It("shoul read Stderr pipe", func() {
 				cri, err := PrisonClient.CreateContainerRunInfo()
